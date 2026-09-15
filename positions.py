@@ -5,6 +5,7 @@ main.pyから呼び出される。シグナルが出た銘柄を「保有中」�
 positions.csv というファイルに記録し、
 - 保有中の銘柄には新しいシグナルを出さない（重複無視）
 - 価格が-8%悪化したら「損切り」として決済する
+- 価格が+10%上昇したら「利確」として決済する
 - 保有からおよそ3週間(21日)経ったら「保有期間終了」として決済する
 という管理を行う。
 """
@@ -17,6 +18,7 @@ import pandas as pd
 POSITIONS_CSV = "positions.csv"
 HOLDING_CALENDAR_DAYS = 21  # 保有期間の目安（約3週間）
 STOP_LOSS_PCT = 0.08        # 損切りライン（8%）
+TAKE_PROFIT_PCT = 0.10      # 利確ライン（10%）
 
 COLUMNS = [
     "code",
@@ -74,7 +76,7 @@ def open_position(
 def check_exits(
     positions_df: pd.DataFrame, latest_prices: dict
 ) -> tuple[pd.DataFrame, list[dict]]:
-    """保有中のポジションをチェックし、損切り・保有期間終了に該当するものを決済する"""
+    """保有中のポジションをチェックし、損切り・利確・保有期間終了に該当するものを決済する"""
     alerts = []
     today = datetime.now().date()
 
@@ -98,6 +100,8 @@ def check_exits(
         exit_reason = None
         if signed_return <= -STOP_LOSS_PCT:
             exit_reason = "損切り"
+        elif signed_return >= TAKE_PROFIT_PCT:
+            exit_reason = "利確"
         elif days_held >= HOLDING_CALENDAR_DAYS:
             exit_reason = "保有期間終了"
 
