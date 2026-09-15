@@ -3,7 +3,10 @@ name: nikkei-signal-monitor
 on:
   schedule:
     - cron: '*/5 0-6 * * 1-5'
-  workflow_dispatch:
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
 
 jobs:
   check-signals:
@@ -26,3 +29,15 @@ jobs:
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           NOTIFY_TO: ${{ secrets.NOTIFY_TO }}
         run: python main.py
+
+      - name: save positions
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add positions.csv
+          if ! git diff --cached --quiet; then
+            git commit -m "update positions"
+            git push
+          else
+            echo "変更なし、コミットをスキップします"
+          fi
