@@ -1,0 +1,26 @@
+name: nikkei-signal-backtest
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  run-backtest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: setup checkout
+        uses: actions/checkout@v4
+
+      - name: setup python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: install requirements
+        run: pip install -r requirements.txt
+
+      - name: run backtest
+        env:
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          NOTIFY_TO: ${{ secrets.NOTIFY_TO }}
+        run: python backtest.py
