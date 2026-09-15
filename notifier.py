@@ -17,10 +17,8 @@ from email.mime.text import MIMEText
 from email.utils import formatdate
 
 
-def send_signal_email(signals: list[dict]) -> None:
-    if not signals:
-        return
-
+def send_email(subject: str, body: str) -> None:
+    """件名と本文を指定して、環境変数の設定に従いGmail経由でメールを送る汎用関数"""
     gmail_address = os.environ.get("GMAIL_ADDRESS")
     gmail_app_password = os.environ.get("GMAIL_APP_PASSWORD")
     notify_to = os.environ.get("NOTIFY_TO")
@@ -32,16 +30,8 @@ def send_signal_email(signals: list[dict]) -> None:
 
     to_addrs = [addr.strip() for addr in notify_to.split(",")]
 
-    lines = []
-    for s in signals:
-        lines.append(
-            f"[{s['type']}] {s['code']} {s['name']}  "
-            f"価格:{s['price']}円  RSI:{s['rsi']}  出来高倍率:{s['volume_ratio']}倍"
-        )
-    body = "本日の売買シグナル一覧\n\n" + "\n".join(lines)
-
     msg = MIMEText(body, "plain", "utf-8")
-    msg["Subject"] = f"【株シグナル通知】{len(signals)}件検出"
+    msg["Subject"] = subject
     msg["From"] = gmail_address
     msg["To"] = ", ".join(to_addrs)
     msg["Date"] = formatdate(localtime=True)
@@ -50,3 +40,17 @@ def send_signal_email(signals: list[dict]) -> None:
         server.starttls()
         server.login(gmail_address, gmail_app_password)
         server.sendmail(gmail_address, to_addrs, msg.as_string())
+
+
+def send_signal_email(signals: list[dict]) -> None:
+    if not signals:
+        return
+
+    lines = []
+    for s in signals:
+        lines.append(
+            f"[{s['type']}] {s['code']} {s['name']}  "
+            f"価格:{s['price']}円  RSI:{s['rsi']}  出来高倍率:{s['volume_ratio']}倍"
+        )
+    body = "本日の売買シグナル一覧\n\n" + "\n".join(lines)
+    send_email(f"【株シグナル通知】{len(signals)}件検出", body)
