@@ -1,6 +1,8 @@
 """
 過去バックテスト: 「出来高急増+RSI」シグナルが過去に出ていたら、
 2〜3週間保有した場合にどうなっていたかを検証するスクリプト。
+- 保有中に-8%まで悪化したら損切りしたものとみなす
+- 同じ銘柄の重複シグナルは、前のポジションが終わるまで無視する
 
 使い方:
   python backtest.py
@@ -19,15 +21,16 @@ from notifier import send_email
 TICKERS_CSV = "tickers_nikkei225.csv"
 
 # --- パラメータ ---
-PERIOD = "4mo"          # 取得する日足データの期間（検証2ヶ月＋指標計算バッファ＋保有期間の余白）
-LOOKBACK_DAYS = 40      # 過去何営業日分のシグナルを検証対象にするか（約2ヶ月）
-HOLDING_DAYS = 15       # シグナル後、何営業日保有したと仮定するか（約3週間）
+PERIOD = "4mo"
+LOOKBACK_DAYS = 40
+HOLDING_DAYS = 15
 RSI_PERIOD = 14
 RSI_BUY_TH = 30.0
 RSI_SELL_TH = 70.0
 VOLUME_WINDOW = 20
 VOLUME_SPIKE_TH = 2.0
 BATCH_SIZE = 50
+STOP_LOSS_PCT = 0.08
 
 
 def load_tickers(csv_path: str) -> pd.DataFrame:
@@ -57,7 +60,6 @@ def fetch_batch(symbols: list[str]) -> dict[str, pd.DataFrame]:
 
 
 def find_past_signals(df: pd.DataFrame) -> list[dict]:
-    """1銘柄分の日足dfから、過去のシグナルと保有後の結果を洗い出す"""
     df = df.dropna(how="all").copy()
     if "Close" not in df.columns or len(df) < RSI_PERIOD + VOLUME_WINDOW + HOLDING_DAYS + 2:
         return []
@@ -67,10 +69,15 @@ def find_past_signals(df: pd.DataFrame) -> list[dict]:
 
     n = len(df)
     start_idx = max(RSI_PERIOD, VOLUME_WINDOW, n - LOOKBACK_DAYS - HOLDING_DAYS)
-    end_idx = n - HOLDING_DAYS  # これ以降はholding_days分の未来データがない
+    end_idx = n - HOLDING_DAYS
 
     results = []
+    next_available_idx = start_idx
+
     for i in range(start_idx, end_idx):
+        if i < next_available_idx:
+            continue
+
         rsi_val = df["rsi"].iloc[i]
         vol_ratio = df["vol_ratio"].iloc[i]
         if pd.isna(rsi_val) or pd.isna(vol_ratio):
@@ -86,21 +93,40 @@ def find_past_signals(df: pd.DataFrame) -> list[dict]:
             continue
 
         entry_price = float(df["Close"].iloc[i])
-        exit_price = float(df["Close"].iloc[i + HOLDING_DAYS])
+
+        exit_idx = i + HOLDING_DAYS
+        stopped_out = False
+        for j in range(i + 1, i + HOLDING_DAYS + 1):
+            price_j = float(df["Close"].iloc[j])
+            path_return = (price_j / entry_price) - 1.0
+            signed_return = path_return if signal_type == "BUY" else -path_return
+            if signed_return <= -STOP_LOSS_PCT:
+                exit_idx = j
+                stopped_out = True
+                break
+
+        exit_price = float(df["Close"].iloc[exit_idx])
         raw_return = (exit_price / entry_price) - 1.0
         ret = raw_return if signal_type == "BUY" else -raw_return
+        if stopped_out:
+            ret = -STOP_LOSS_PCT
 
         results.append(
             {
                 "date": df.index[i].strftime("%Y-%m-%d"),
+                "exit_date": df.index[exit_idx].strftime("%Y-%m-%d"),
                 "type": signal_type,
                 "rsi": round(float(rsi_val), 1),
                 "volume_ratio": round(float(vol_ratio), 2),
                 "entry_price": round(entry_price, 1),
                 "exit_price": round(exit_price, 1),
                 "return_pct": round(ret * 100, 2),
+                "stopped_out": stopped_out,
             }
         )
+
+        next_available_idx = exit_idx + 1
+
     return results
 
 
@@ -146,12 +172,15 @@ def main():
     win_rate = win_count / total * 100
     avg_return = result_df["return_pct"].mean()
     median_return = result_df["return_pct"].median()
+    stop_count = result_df["stopped_out"].sum()
     best = result_df.loc[result_df["return_pct"].idxmax()]
     worst = result_df.loc[result_df["return_pct"].idxmin()]
 
     summary_lines = [
-        f"■ 検証条件: 過去{LOOKBACK_DAYS}営業日のシグナル / 保有{HOLDING_DAYS}営業日(約3週間)を想定",
-        f"■ シグナル総数: {total}件",
+        f"■ 検証条件: 過去{LOOKBACK_DAYS}営業日のシグナル / 最大保有{HOLDING_DAYS}営業日(約3週間)"
+        f" / 損切りライン:-{STOP_LOSS_PCT*100:.0f}%",
+        f"■ シグナル総数: {total}件(同一銘柄の重複シグナルは除外済み)",
+        f"■ うち損切り決済: {stop_count}件",
         f"■ 勝率(プラスで終わった割合): {win_rate:.1f}%",
         f"■ 平均リターン: {avg_return:+.2f}%",
         f"■ 中央値リターン: {median_return:+.2f}%",
@@ -165,8 +194,9 @@ def main():
 
     detail_lines = []
     for _, row in result_df.iterrows():
+        stop_tag = "[損切り]" if row["stopped_out"] else ""
         detail_lines.append(
-            f"{row['date']} [{row['type']}] {row['code']} {row['name']}  "
+            f"{row['date']}→{row['exit_date']} [{row['type']}]{stop_tag} {row['code']} {row['name']}  "
             f"RSI:{row['rsi']}  出来高倍率:{row['volume_ratio']}倍  "
             f"リターン:{row['return_pct']:+.2f}%"
         )
