@@ -109,7 +109,7 @@ code,name,type,entry_date,entry_price,status,exit_date,exit_price,return_pct
 9602,東宝,BUY,2026-09-17,1616.0,open,,,
 9735,セコム,SELL,2026-09-17,6508.0,open,,,
 9843,ニトリホールディングス,SELL,2026-09-17,3122.0,open,,,
-3436,SUMCO,BUY,2026-09-17,2857.0,open,,,
+3436,SUMCO,BUY,2026-09-17,2857.0,closed,2026-09-24,3168.0,10.89
 4503,アステラス製薬,SELL,2026-09-17,2358.0,open,,,
 6326,クボタ,SELL,2026-09-17,2774.5,open,,,
 7012,川崎重工業,BUY,2026-09-17,2420.0,open,,,
