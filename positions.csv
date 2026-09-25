@@ -63,7 +63,7 @@ code,name,type,entry_date,entry_price,status,exit_date,exit_price,return_pct
 7951,ヤマハ,SELL,2026-09-16,1264.0,open,,,
 7974,任天堂,BUY,2026-09-16,8104.0,open,,,
 8002,丸紅,BUY,2026-09-16,4992.0,open,,,
-8035,東京エレクトロン,SELL,2026-09-16,51610.0,open,,,
+8035,東京エレクトロン,SELL,2026-09-16,51610.0,closed,2026-09-25,55850.0,-8.22
 8053,住友商事,BUY,2026-09-16,1777.0,open,,,
 8308,りそなホールディングス,BUY,2026-09-16,2453.5,open,,,
 8309,三井住友トラストグループ,BUY,2026-09-16,1779.0,open,,,
@@ -171,3 +171,4 @@ code,name,type,entry_date,entry_price,status,exit_date,exit_price,return_pct
 8331,千葉銀行,SELL,2026-09-25,2790.5,open,,,
 8354,ふくおかフィナンシャルグループ,SELL,2026-09-25,7847.0,open,,,
 8411,みずほフィナンシャルグループ,SELL,2026-09-25,8532.0,open,,,
+6861,キーエンス,SELL,2026-09-25,78970.0,open,,,
