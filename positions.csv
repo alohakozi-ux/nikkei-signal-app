@@ -118,7 +118,7 @@ code,name,type,entry_date,entry_price,status,exit_date,exit_price,return_pct
 7270,SUBARU,SELL,2026-09-17,2684.0,open,,,
 8802,三菱地所,SELL,2026-09-17,3685.0,open,,,
 4324,電通グループ,BUY,2026-09-18,3575.0,open,,,
-5301,東海カーボン,SELL,2026-09-18,2129.5,open,,,
+5301,東海カーボン,SELL,2026-09-18,2129.5,closed,2026-09-25,2308.5,-8.41
 7735,SCREENホールディングス,SELL,2026-09-18,12590.0,open,,,
 7733,オリンパス,BUY,2026-09-18,1983.0,open,,,
 8306,三菱UFJフィナンシャル・グループ,BUY,2026-09-18,3594.0,open,,,
@@ -167,3 +167,7 @@ code,name,type,entry_date,entry_price,status,exit_date,exit_price,return_pct
 9101,日本郵船,BUY,2026-09-24,7281.0,open,,,
 9433,KDDI,BUY,2026-09-24,3036.0,open,,,
 9434,ソフトバンク,SELL,2026-09-24,247.5,open,,,
+5801,古河電気工業,BUY,2026-09-25,3790.0,open,,,
+8331,千葉銀行,SELL,2026-09-25,2790.5,open,,,
+8354,ふくおかフィナンシャルグループ,SELL,2026-09-25,7847.0,open,,,
+8411,みずほフィナンシャルグループ,SELL,2026-09-25,8532.0,open,,,
