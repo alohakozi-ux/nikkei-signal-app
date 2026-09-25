@@ -57,7 +57,7 @@ code,name,type,entry_date,entry_price,status,exit_date,exit_price,return_pct
 6952,カシオ計算機,SELL,2026-09-16,2152.0,open,,,
 6988,日東電工,SELL,2026-09-16,3348.0,open,,,
 7269,スズキ,SELL,2026-09-16,2035.0,open,,,
-7731,ニコン,SELL,2026-09-16,1739.5,open,,,
+7731,ニコン,SELL,2026-09-16,1739.5,closed,2026-09-25,1882.5,-8.22
 7741,HOYA,SELL,2026-09-16,22425.0,open,,,
 7762,シチズン時計,SELL,2026-09-16,2275.0,open,,,
 7951,ヤマハ,SELL,2026-09-16,1264.0,open,,,
