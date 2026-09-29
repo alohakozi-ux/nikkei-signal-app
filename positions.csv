@@ -220,3 +220,8 @@ code,name,type,entry_date,entry_price,status,exit_date,exit_price,return_pct
 8304,あおぞら銀行,SELL,2026-09-29,3480.0,open,,,
 8591,オリックス,BUY,2026-09-29,5892.0,open,,,
 9202,ANAホールディングス,BUY,2026-09-29,2964.5,open,,,
+1803,清水建設,BUY,2026-09-29,2096.5,open,,,
+5706,三井金属,SELL,2026-09-29,2275.0,open,,,
+6954,ファナック,SELL,2026-09-29,5913.0,open,,,
+7911,TOPPANホールディングス,SELL,2026-09-29,2344.5,open,,,
+9503,関西電力,SELL,2026-09-29,2653.0,open,,,
