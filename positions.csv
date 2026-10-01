@@ -175,7 +175,7 @@ code,name,type,entry_date,entry_price,status,exit_date,exit_price,return_pct
 4901,富士フイルムホールディングス,SELL,2026-09-25,3420.0,open,,,
 5233,太平洋セメント,BUY,2026-09-25,4146.0,open,,,
 5802,住友電気工業,SELL,2026-09-25,2205.5,open,,,
-6146,ディスコ,BUY,2026-09-25,54300.0,open,,,
+6146,ディスコ,BUY,2026-09-25,54300.0,closed,2026-10-01,59790.0,10.11
 6473,ジェイテクト,SELL,2026-09-25,2119.0,open,,,
 6758,ソニーグループ,BUY,2026-09-25,3716.0,open,,,
 7011,三菱重工業,BUY,2026-09-25,3945.0,open,,,
@@ -235,3 +235,4 @@ code,name,type,entry_date,entry_price,status,exit_date,exit_price,return_pct
 4543,テルモ,SELL,2026-09-30,2300.5,open,,,
 2282,日本ハム,SELL,2026-09-30,1990.0,open,,,
 5831,しずおかフィナンシャルグループ,SELL,2026-09-30,3647.0,open,,,
+8725,MS&ADインシュアランスグループホールディングス,SELL,2026-10-01,4861.0,open,,,
