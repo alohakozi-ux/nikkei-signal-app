@@ -43,7 +43,7 @@ code,name,type,entry_date,entry_price,status,exit_date,exit_price,return_pct
 2002,日清製粉グループ本社,BUY,2026-09-16,2056.5,open,,,
 2914,JT,BUY,2026-09-16,6781.0,open,,,
 3099,三越伊勢丹ホールディングス,SELL,2026-09-16,3279.0,closed,2026-09-29,1669.0,49.1
-3289,東急不動産ホールディングス,BUY,2026-09-16,1283.5,open,,,
+3289,東急不動産ホールディングス,BUY,2026-09-16,1283.5,closed,2026-10-06,1180.0,-8.06
 3405,クラレ,SELL,2026-09-16,1823.5,open,,,
 3407,旭化成,SELL,2026-09-16,1592.0,open,,,
 4021,日産化学,SELL,2026-09-16,8174.0,open,,,
@@ -258,3 +258,4 @@ code,name,type,entry_date,entry_price,status,exit_date,exit_price,return_pct
 7735,SCREENホールディングス,SELL,2026-10-05,15710.0,open,,,
 7762,シチズン時計,BUY,2026-10-05,2459.0,open,,,
 4507,塩野義製薬,BUY,2026-10-05,2661.5,open,,,
+5802,住友電気工業,SELL,2026-10-06,2494.5,open,,,
