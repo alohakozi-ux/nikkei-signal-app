@@ -199,7 +199,7 @@ code,name,type,entry_date,entry_price,status,exit_date,exit_price,return_pct
 3402,東レ,BUY,2026-09-28,1258.5,open,,,
 4004,レゾナック・ホールディングス,BUY,2026-09-28,14725.0,closed,2026-10-02,16275.0,10.53
 4063,信越化学工業,BUY,2026-09-28,5835.0,open,,,
-4307,野村総合研究所,BUY,2026-09-28,5021.0,open,,,
+4307,野村総合研究所,BUY,2026-09-28,5021.0,closed,2026-10-09,5573.0,10.99
 4689,LINEヤフー,SELL,2026-09-28,517.6,open,,,
 4902,コニカミノルタ,BUY,2026-09-28,668.9,open,,,
 5332,TOTO,BUY,2026-09-28,5899.0,open,,,
@@ -327,3 +327,5 @@ code,name,type,entry_date,entry_price,status,exit_date,exit_price,return_pct
 8830,住友不動産,SELL,2026-10-08,3094.0,open,,,
 9009,京成電鉄,SELL,2026-10-08,1299.0,open,,,
 9843,ニトリホールディングス,SELL,2026-10-08,3118.0,open,,,
+4704,トレンドマイクロ,SELL,2026-10-09,7514.0,open,,,
+9107,川崎汽船,SELL,2026-10-09,3346.0,open,,,
