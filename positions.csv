@@ -358,5 +358,5 @@ code,name,type,entry_date,entry_price,status,exit_date,exit_price,return_pct
 6724,セイコーエプソン,SELL,2026-10-13,3391.0,open,,,
 6762,TDK,SELL,2026-10-13,3149.0,open,,,
 6952,カシオ計算機,SELL,2026-10-13,2281.5,open,,,
-7733,オリンパス,SELL,2026-10-13,2040.0,open,,,
+7733,オリンパス,SELL,2026-10-13,2040.0,closed,2026-10-14,1746.0,14.41
 8035,東京エレクトロン,BUY,2026-10-13,11590.0,open,,,
