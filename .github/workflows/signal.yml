@@ -2,8 +2,14 @@ name: nikkei-signal-monitor
 
 on:
   schedule:
-    - cron: '*/5 0-6 * * 1-5'
-  workflow_dispatch: {}
+    # 平日の大引け後(日本時間 15:45)に1日1回実行
+    - cron: '45 6 * * 1-5'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: '休場日でも実行する(テスト用)'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -28,7 +34,7 @@ jobs:
           GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           NOTIFY_TO: ${{ secrets.NOTIFY_TO }}
-        run: python main.py
+        run: python main.py ${{ inputs.force && '--force' || '' }}
 
       - name: save positions
         run: |
@@ -37,6 +43,7 @@ jobs:
           git add positions.csv
           if ! git diff --cached --quiet; then
             git commit -m "update positions"
+            git pull --rebase
             git push
           else
             echo "変更なし、コミットをスキップします"
