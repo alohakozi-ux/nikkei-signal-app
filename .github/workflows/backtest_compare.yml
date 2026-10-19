@@ -1,0 +1,27 @@
+name: nikkei-signal-backtest-compare
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  run-backtest-compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: setup checkout
+        uses: actions/checkout@v4
+
+      - name: setup python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: install requirements
+        run: pip install -r requirements.txt
+
+      - name: run backtest compare
+        env:
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          NOTIFY_TO: ${{ secrets.NOTIFY_TO }}
+        run: python backtest_compare.py
