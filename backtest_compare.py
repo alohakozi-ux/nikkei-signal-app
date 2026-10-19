@@ -1,19 +1,16 @@
 """
-バックテスト比較 第3回: 「翌朝の始値で買った場合」の確認 (買いのみ・約4年)
+直近1か月シミュレーション: もし1か月前から新しい通知ルールで買っていたら、今いくらの損益か。
 
-第2回の結果、「RSI25以下・出来高2倍以上」が一番良かった。
-ただし第2回は「シグナルが出た日の終値で買う」計算だった。実際の通知は大引け後に届くので、
-買えるのは翌朝の始値になる。その場合でも成績が保たれるかを確かめる。
+ルール(本番の main.py と同じ):
+  日足で「RSI25以下」かつ「出来高が直近平均の2倍以上」になった銘柄を、翌朝の始値で買う。
+  損切り-8%、利確+10%、最大15営業日保有。同じ銘柄は、前のポジションが終わるまで買わない。
+  株式分割の影響を避けるため、分割調整済みの株価を使う。
 
-比べるパターン (すべて買いのみ・出来高の倍率つき):
-  RSI30以下・出来高2倍 (従来ルール) / RSI25以下・出来高2倍 / RSI20以下・出来高2倍 / RSI25以下・出来高3倍
-  それぞれを「当日終値で買う」「翌朝の始値で買う」の2通りで計算する。
-
-共通の前提:
-  - 最大15営業日保有。途中で -8% 以下になったら損切り、+10% 以上で利確 (終値で判定)
-  - 同じ銘柄のシグナルは、前のポジションが終わるまで無視
-  - 株式分割の影響を避けるため、分割調整済みの株価を使う
-  - 手数料・税金・スリッページは考慮しない
+前提:
+  - 1件ごとに100万円ずつ買ったと考える(金額は INVEST_PER_TRADE で変更できる)
+  - 手数料・税金・約定のズレは考慮しない
+  - 損切り・利確は、その日の終値で判定する
+  - 今まだ持っているもの(保有中)は、最新の終値で計算した含み損益
 
 使い方:
   python backtest_compare.py             # 結果をメールで送る
@@ -28,35 +25,20 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 
-from signal_logic_v2 import (
-    OLD_CONFIG,
-    SignalConfig,
-    calc_signals,
-)
+from signal_logic_v2 import OLD_CONFIG, calc_signals
 
 TICKERS_CSV = "tickers_nikkei225.csv"
 
-PERIOD = "5y"          # 取得する期間(指標の助走期間込み)
-LOOKBACK_DAYS = 1000   # 検証する期間(営業日。約4年)
+PERIOD = "8mo"            # 取得する期間(RSIなどの助走期間込み)
+MONTH_DAYS = 30           # 何日前から始めたことにするか
 HOLDING_DAYS = 15
 STOP_LOSS_PCT = 0.08
 TAKE_PROFIT_PCT = 0.10
+INVEST_PER_TRADE = 1_000_000  # 1件あたりの投資額(円)
 BATCH_SIZE = 50
-MIN_RELIABLE_TRADES = 30  # これより少ないと偶然の可能性が高い
 
-
-CONDITIONS = [(30.0, 2.0), (25.0, 2.0), (20.0, 2.0), (25.0, 3.0)]
-
-
-def condition_name(rsi: float, vol: float) -> str:
-    name = f"RSI{rsi:.0f}以下・出来高{vol:.0f}倍以上"
-    tags = {(30, 2): "従来ルール", (25, 2): "有力候補", (25, 3): "案4"}
-    tag = tags.get((round(rsi), round(vol)))
-    return f"{name} [{tag}]" if tag else name
-
-
-def build_config(rsi: float, vol: float) -> SignalConfig:
-    return replace(OLD_CONFIG, rsi_buy_th=rsi, volume_spike_th=vol)
+# 買いのみ・RSI25以下・出来高2倍以上(本番と同じ)
+CONFIG = replace(OLD_CONFIG, rsi_buy_th=25.0, volume_spike_th=2.0)
 
 
 def load_tickers(csv_path: str) -> pd.DataFrame:
@@ -95,74 +77,60 @@ def fetch_batch(symbols: list[str]) -> dict[str, pd.DataFrame]:
     return result
 
 
-def simulate(df: pd.DataFrame, signals: pd.Series, entry_mode: str = "close") -> list[dict]:
+def simulate_recent(df: pd.DataFrame, signals: pd.Series, start_idx: int):
     """
-    シグナルの出た日ごとに、保有した場合の結果を計算する。
-    entry_mode="close"     : シグナルが出た日の終値で買う
-    entry_mode="next_open" : 翌営業日の始値で買う (大引け後に通知が届く実際の流れ)
-    どちらも、シグナルの翌営業日から15営業日ぶんの終値を見て、損切り・利確・期間満了を判定する。
+    start_idx 以降のシグナルを、翌朝の始値で買った場合の結果にする。
+    戻り値: (買った記録のリスト, 最新日にシグナルが出ている=明日の朝の買い候補か)
     """
     close = df["Close"].to_numpy(dtype=float)
     open_ = df["Open"].to_numpy(dtype=float)
     sig = signals.to_numpy()
     n = len(df)
 
-    first = max(0, n - LOOKBACK_DAYS - HOLDING_DAYS)
-    last = n - HOLDING_DAYS - 1  # 保有期間ぶんのデータが残っている日まで
-    next_ok = first
     trades = []
-
-    for i in range(first, last + 1):
+    next_ok = start_idx
+    for i in range(start_idx, n - 1):  # 翌日(i+1)のデータが必要
         if i < next_ok or not sig[i]:
             continue
-
-        entry = close[i] if entry_mode == "close" else open_[i + 1]
+        entry = open_[i + 1]
         if not np.isfinite(entry) or entry <= 0:
             continue
 
-        side = sig[i]
-        exit_idx = i + HOLDING_DAYS
-        reason = "期間満了"
-
-        for j in range(i + 1, i + HOLDING_DAYS + 1):
+        exit_idx, reason = None, None
+        for j in range(i + 1, min(i + HOLDING_DAYS, n - 1) + 1):
             r = close[j] / entry - 1.0
-            r = r if side == "BUY" else -r
             if r <= -STOP_LOSS_PCT:
                 exit_idx, reason = j, "損切り"
                 break
             if r >= TAKE_PROFIT_PCT:
                 exit_idx, reason = j, "利確"
                 break
+        if exit_idx is None:
+            if i + HOLDING_DAYS <= n - 1:
+                exit_idx, reason = i + HOLDING_DAYS, "期間満了"
+            else:
+                exit_idx, reason = n - 1, "保有中"
 
-        r = close[exit_idx] / entry - 1.0
-        r = r if side == "BUY" else -r
         trades.append(
             {
-                "date": df.index[i],
-                "type": side,
-                "return_pct": r * 100.0,
+                "signal_date": df.index[i],
+                "entry_date": df.index[i + 1],
+                "entry_price": entry,
+                "exit_date": df.index[exit_idx],
+                "exit_price": close[exit_idx],
+                "ret": close[exit_idx] / entry - 1.0,
                 "reason": reason,
             }
         )
-        next_ok = exit_idx + 1
+        next_ok = n if reason == "保有中" else exit_idx + 1
 
-    return trades
+    candidate = bool(sig[n - 1]) and next_ok <= n - 1 and n - 1 >= start_idx
+    return trades, candidate
 
 
-def summarize(trades: pd.DataFrame) -> str:
-    if trades.empty:
-        return "0件"
-    n = len(trades)
-    win = (trades["return_pct"] > 0).mean() * 100
-    mean = trades["return_pct"].mean()
-    median = trades["return_pct"].median()
-    worst = trades["return_pct"].min()
-    stops = (trades["reason"] == "損切り").sum()
-    note = "  ※件数が少なく参考程度" if n < MIN_RELIABLE_TRADES else ""
-    return (
-        f"{n}件  勝率{win:.1f}%  平均{mean:+.2f}%  中央値{median:+.2f}%  "
-        f"最悪{worst:+.1f}%  損切り{stops}件{note}"
-    )
+def yen(x: float) -> str:
+    """円をわかりやすい表記(万円)にする"""
+    return f"{x / 10_000:+,.1f}万円"
 
 
 def main():
@@ -170,6 +138,7 @@ def main():
 
     tickers_df = load_tickers(TICKERS_CSV)
     symbols = tickers_df["yf_symbol"].tolist()
+    names = dict(zip(tickers_df["code"], tickers_df["name"]))
 
     all_data: dict[str, pd.DataFrame] = {}
     for i in range(0, len(symbols), BATCH_SIZE):
@@ -180,68 +149,81 @@ def main():
             continue
         for sym, df in batch.items():
             df = clean(df)
-            if "Close" in df.columns and len(df) > 80:
+            if "Close" in df.columns and "Open" in df.columns and len(df) > 80:
                 all_data[sym] = df
         time.sleep(1)
-
     print(f"取得できた銘柄数: {len(all_data)}")
 
-    # 前半・後半に分ける日付(検証期間のちょうど真ん中)
-    longest = max(all_data.values(), key=len)
-    mid_pos = max(0, len(longest) - LOOKBACK_DAYS // 2 - HOLDING_DAYS)
-    cutoff = longest.index[mid_pos]
+    last_date = max(df.index[-1] for df in all_data.values())
+    start_date = last_date - pd.Timedelta(days=MONTH_DAYS)
 
-    MODES = [("close", "当日終値で買う(第2回と同じ)"), ("next_open", "翌朝の始値で買う(実際の流れ)")]
-    results: dict[tuple, pd.DataFrame] = {}
-    for rsi, vol in CONDITIONS:
-        cfg = build_config(rsi, vol)
-        per_mode = {m: [] for m, _ in MODES}
-        for sym, df in all_data.items():
-            signals = calc_signals(df, cfg)
-            signals = signals.where(signals == "BUY", "")  # 買いだけを使う
-            for m, _ in MODES:
-                for t in simulate(df, signals, m):
-                    t["code"] = sym.replace(".T", "")
-                    per_mode[m].append(t)
-        for m, _ in MODES:
-            results[(rsi, vol, m)] = pd.DataFrame(
-                per_mode[m], columns=["date", "type", "return_pct", "reason", "code"]
-            )
+    trades, candidates = [], []
+    for sym, df in all_data.items():
+        code = sym.replace(".T", "")
+        start_idx = int(df.index.searchsorted(start_date))
+        signals = calc_signals(df, CONFIG)
+        signals = signals.where(signals == "BUY", "")  # 買いだけを使う
+        ts, cand = simulate_recent(df, signals, start_idx)
+        for t in ts:
+            t["code"], t["name"] = code, names.get(code, code)
+            trades.append(t)
+        if cand:
+            candidates.append((code, names.get(code, code), float(df["Close"].iloc[-1])))
+
+    trades.sort(key=lambda t: (t["signal_date"], t["code"]))
+    closed = [t for t in trades if t["reason"] != "保有中"]
+    holding = [t for t in trades if t["reason"] == "保有中"]
+
+    pl_closed = sum(t["ret"] for t in closed) * INVEST_PER_TRADE
+    pl_holding = sum(t["ret"] for t in holding) * INVEST_PER_TRADE
+    wins = sum(1 for t in closed if t["ret"] > 0)
+
+    # 同時に持っていた最大の件数(必要な資金の目安)
+    days = pd.bdate_range(start_date, last_date)
+    peak = 0
+    for d in days:
+        cnt = sum(1 for t in trades if t["entry_date"] <= d <= t["exit_date"])
+        peak = max(peak, cnt)
 
     lines = [
-        f"■ 検証期間: 直近約{LOOKBACK_DAYS}営業日(約4年) / 対象{len(all_data)}銘柄 / 「買い」のみ",
-        f"■ 前半・後半の境目: {cutoff.strftime('%Y-%m-%d')}",
-        f"■ 保有: 最大{HOLDING_DAYS}営業日、損切り-{STOP_LOSS_PCT*100:.0f}%、利確+{TAKE_PROFIT_PCT*100:.0f}%",
-        "■ 見方: 「翌朝の始値で買う」でも、平均リターンがプラスのまま保たれていれば安心できる。",
-        "        件数が30件未満のものは偶然の可能性が高い。",
+        f"■ シミュレーション期間: {start_date.strftime('%Y-%m-%d')} 〜 {last_date.strftime('%Y-%m-%d')} "
+        f"(1か月前から始めたと仮定)",
+        "■ ルール: 日足でRSI25以下かつ出来高2倍以上 → 翌朝の始値で買う。損切り-8%、利確+10%、最大15営業日",
+        f"■ 前提: 1件ごとに{INVEST_PER_TRADE // 10_000}万円ずつ買う。手数料・税金は含まない",
         "",
+        f"■ 買った件数: {len(trades)}件(決済済み{len(closed)}件 / 保有中{len(holding)}件)",
+        f"■ 合計損益: {yen(pl_closed + pl_holding)}",
+        f"     うち決済済み: {yen(pl_closed)} / 保有中の含み損益: {yen(pl_holding)}",
     ]
-    for rsi, vol in CONDITIONS:
-        lines.append(f"【{condition_name(rsi, vol)}】")
-        means = {}
-        for m, mlabel in MODES:
-            trades = results[(rsi, vol, m)]
-            before = trades[trades["date"] < cutoff]
-            after = trades[trades["date"] >= cutoff]
-            means[m] = trades["return_pct"].mean() if len(trades) else float("nan")
-            lines.append(f"  {mlabel}")
-            lines.append(f"    全期間: {summarize(trades)}")
-            lines.append(f"    前半  : {summarize(before)}")
-            lines.append(f"    後半  : {summarize(after)}")
-        diff = means["next_open"] - means["close"]
-        lines.append(f"  → 平均リターンの差(始値買い - 終値買い): {diff:+.2f}%")
-        lines.append("")
-
-    lines += [
-        "※ 手数料・税金・約定のズレは含まれていません。過去の結果は将来を保証しません。",
-    ]
+    if closed:
+        avg = np.mean([t["ret"] for t in closed]) * 100
+        lines.append(f"■ 決済済みの勝率: {wins}/{len(closed)}件 = {wins / len(closed) * 100:.1f}%  平均リターン: {avg:+.2f}%")
+    lines.append(f"■ 同時に持っていた最大の件数: {peak}件(必要な資金の目安: 約{peak * INVEST_PER_TRADE // 10_000}万円)")
+    lines.append("")
+    if candidates:
+        lines.append("■ 明日の朝の買い候補(今日の大引けでシグナルが出た銘柄)")
+        for code, name, price in candidates:
+            lines.append(f"   {code} {name}  終値:{price:,.1f}円")
+    else:
+        lines.append("■ 明日の朝の買い候補: なし")
+    lines += ["", "--- 1件ごとの結果(シグナルが出た日の順) ---"]
+    for t in trades:
+        lines.append(
+            f"{t['signal_date'].strftime('%m/%d')}→{t['exit_date'].strftime('%m/%d')} "
+            f"[{t['reason']}] {t['code']} {t['name']}  "
+            f"買値:{t['entry_price']:,.1f}円 → {t['exit_price']:,.1f}円  "
+            f"{t['ret'] * 100:+.2f}% ({yen(t['ret'] * INVEST_PER_TRADE)})"
+        )
+    lines += ["", "※ 過去の仮想の結果です。将来の成績を保証しません。売買はご自身の判断で行ってください。"]
     body = "\n".join(lines)
     print(body)
 
     if send_mail:
         from notifier import send_email
 
-        send_email("【バックテスト比較3】翌朝の始値で買った場合(買いのみ・約4年)", body)
+        send_email(
+            f"【直近1か月シミュレーション】合計{yen(pl_closed + pl_holding)}(買い{len(trades)}件)", body
+        )
         print("メールを送信しました")
 
 
