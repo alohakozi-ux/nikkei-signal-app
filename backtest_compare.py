@@ -1,13 +1,17 @@
 """
-バックテスト比較: 従来ルール と 新ルール(案1〜5)を、過去約1年のデータで比べる。
+バックテスト比較 第2回: 「買い」だけに絞って、案4(しきい値強化)と案5(決算前後除外)の
+組み合わせを、過去約4年のデータで比べる。
+
+第1回の結果(約1年分):
+  - 売りシグナルは成績が悪かった → 今回は「買い」のみ
+  - 案4・案5は買いの成績を上げたが、案4は件数が少なかった → 4年分に広げて確かめる
 
 比べるパターン:
-  - 基準(従来ルール)
-  - 案1〜5 を「1つだけ」足したもの (どの案が効くかを見るため)
-  - 案1〜5 をすべて足したもの (これが新しい本番ルール)
+  RSIのしきい値(30 / 25) × 出来高の倍率(2倍 / 3倍) × 決算前後除外(なし / あり) の8通り
+  + 「RSI25・出来高3倍・決算除外」に、市場急落日除外(案3)を足したもの
 
 共通の前提:
-  - シグナルが出た日の終値で買う(SELLは売り=下がると利益、として計算)
+  - シグナルが出た日の終値で買う
   - 最大15営業日保有。途中で -8% 以下になったら損切り、+10% 以上で利確
   - 同じ銘柄のシグナルは、前のポジションが終わるまで無視
   - 株式分割の影響を避けるため、分割調整済みの株価を使う
@@ -35,24 +39,52 @@ from signal_logic_v2 import (
 TICKERS_CSV = "tickers_nikkei225.csv"
 INDEX_SYMBOL = "^N225"
 
-PERIOD = "2y"          # 取得する期間(指標の助走期間込み)
-LOOKBACK_DAYS = 250    # 検証する期間(営業日。約1年)
+PERIOD = "5y"          # 取得する期間(指標の助走期間込み)
+LOOKBACK_DAYS = 1000   # 検証する期間(営業日。約4年)
 HOLDING_DAYS = 15
 STOP_LOSS_PCT = 0.08
 TAKE_PROFIT_PCT = 0.10
 BATCH_SIZE = 50
 MIN_RELIABLE_TRADES = 30  # これより少ないと偶然の可能性が高い
 
-BASE = OLD_CONFIG
-VARIANTS: dict[str, SignalConfig] = {
-    "基準(従来ルール)": BASE,
-    "案1のみ: トレンド除外": replace(BASE, use_trend_filter=True),
-    "案2のみ: 反発確認": replace(BASE, use_rebound_confirm=True),
-    "案3のみ: 市場急落日除外": replace(BASE, use_market_filter=True),
-    "案4のみ: しきい値強化": replace(BASE, rsi_buy_th=25.0, rsi_sell_th=75.0, volume_spike_th=3.0),
-    "案5のみ: 決算前後除外": replace(BASE, use_earnings_filter=True),
-    "案1〜5すべて(新ルール)": SignalConfig(),
-}
+
+def variant_name(rsi: float, vol: float, earnings: bool, market: bool) -> str:
+    name = f"RSI{rsi:.0f}以下・出来高{vol:.0f}倍以上"
+    if earnings:
+        name += "・決算除外"
+    if market:
+        name += "・急落日除外"
+    tags = {
+        (30, 2, False, False): "従来ルール",
+        (25, 3, False, False): "案4",
+        (30, 2, True, False): "案5",
+        (25, 3, True, False): "案4+案5",
+        (25, 3, True, True): "案3+案4+案5",
+    }
+    tag = tags.get((round(rsi), round(vol), earnings, market))
+    return f"{name} [{tag}]" if tag else name
+
+
+def build_variants() -> dict[str, SignalConfig]:
+    variants = {}
+    for earnings in (False, True):
+        for rsi, vol in ((30.0, 2.0), (25.0, 2.0), (30.0, 3.0), (25.0, 3.0)):
+            cfg = replace(
+                OLD_CONFIG,
+                rsi_buy_th=rsi,
+                volume_spike_th=vol,
+                use_earnings_filter=earnings,
+            )
+            variants[variant_name(rsi, vol, earnings, False)] = cfg
+    best = replace(
+        OLD_CONFIG,
+        rsi_buy_th=25.0,
+        volume_spike_th=3.0,
+        use_earnings_filter=True,
+        use_market_filter=True,
+    )
+    variants[variant_name(25.0, 3.0, True, True)] = best
+    return variants
 
 
 def load_tickers(csv_path: str) -> pd.DataFrame:
@@ -177,32 +209,43 @@ def main():
 
     print(f"取得できた銘柄数: {len(all_data)}")
 
+    # 前半・後半に分ける日付(検証期間のちょうど真ん中)
+    longest = max(all_data.values(), key=len)
+    mid_pos = max(0, len(longest) - LOOKBACK_DAYS // 2 - HOLDING_DAYS)
+    cutoff = longest.index[mid_pos]
+
     results: dict[str, pd.DataFrame] = {}
-    for label, cfg in VARIANTS.items():
+    for label, cfg in build_variants().items():
         market_drop = calc_market_drop(index_df, cfg.market_drop_th)
         rows = []
         for sym, df in all_data.items():
             signals = calc_signals(df, cfg, market_drop)
+            signals = signals.where(signals == "BUY", "")  # 買いだけを使う
             for t in simulate(df, signals):
                 t["code"] = sym.replace(".T", "")
                 rows.append(t)
         results[label] = pd.DataFrame(rows, columns=["date", "type", "return_pct", "reason", "code"])
 
     lines = [
-        f"■ 検証期間: 直近約{LOOKBACK_DAYS}営業日(約1年) / 対象{len(all_data)}銘柄",
+        f"■ 検証期間: 直近約{LOOKBACK_DAYS}営業日(約4年) / 対象{len(all_data)}銘柄 / 「買い」のみ",
+        f"■ 前半・後半の境目: {cutoff.strftime('%Y-%m-%d')}",
         f"■ 保有: 最大{HOLDING_DAYS}営業日、損切り-{STOP_LOSS_PCT*100:.0f}%、利確+{TAKE_PROFIT_PCT*100:.0f}%",
-        "■ 見方: 勝率が高く、平均リターンがプラスに近いほど良い。件数が少ない結果は偶然の可能性が高い",
+        "■ 見方: 平均リターンがプラスで大きく、前半と後半の両方で良いものが安定している。",
+        "        件数が30件未満のものは偶然の可能性が高い。",
         "",
     ]
     for label, trades in results.items():
+        before = trades[trades["date"] < cutoff]
+        after = trades[trades["date"] >= cutoff]
         lines.append(f"【{label}】")
-        lines.append(f"  全体 : {summarize(trades)}")
-        lines.append(f"  買い : {summarize(trades[trades['type'] == 'BUY'])}")
-        lines.append(f"  売り : {summarize(trades[trades['type'] == 'SELL'])}")
+        lines.append(f"  全期間: {summarize(trades)}")
+        lines.append(f"  前半  : {summarize(before)}")
+        lines.append(f"  後半  : {summarize(after)}")
         lines.append("")
 
     lines += [
-        "※ 売りシグナルは「空売り」(下がると利益)として計算しています。",
+        "※ 前回(約1年・売り買い混在)と違い、売りシグナルが買いの保有を邪魔しないため、",
+        "   「従来ルール」の買いの数字が前回と少し違います。",
         "※ 手数料・税金・約定のズレは含まれていません。過去の結果は将来を保証しません。",
     ]
     body = "\n".join(lines)
@@ -211,7 +254,7 @@ def main():
     if send_mail:
         from notifier import send_email
 
-        send_email("【バックテスト比較】従来ルール vs 新ルール(案1〜5)", body)
+        send_email("【バックテスト比較2】買いのみ・案4/案5の組み合わせ(約4年)", body)
         print("メールを送信しました")
 
 
